@@ -2,7 +2,6 @@ package sudoku
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -105,11 +104,12 @@ func (s Sudoku) IsValid(value, row, col int) bool {
 
 func (s Sudoku) String() string {
 	res := strings.Builder{}
-	res.WriteString("\n")
+	res.WriteString("       A  B  C  .  D  E  F  .  G  H  I\n")
 	for r := 0; r < s.size; r++ {
 		if r > 0 && r%3 == 0 {
-			res.WriteString("----------+-----------+----------\n")
+			res.WriteString("   -  ----------+-----------+----------\n")
 		}
+		res.WriteString(fmt.Sprintf("   %d  ", r+1))
 		for c := 0; c < s.size; c++ {
 			if c > 0 && c%3 == 0 {
 				res.WriteString(" | ")
@@ -140,8 +140,8 @@ func (s Sudoku) GetValid(row, col int) ValueSet {
 // GetAllOptions returns a slice of Option, giving, for each undef position, all possible values
 //
 // Result slice is sorted from option with the fewest possible values first
-func (s Sudoku) GetAllOptions() []Option {
-	res := []Option{}
+func (s Sudoku) GetAllOptions() Options {
+	res := Options{}
 	for r := 0; r < s.size; r++ {
 		for c := 0; c < s.size; c++ {
 			if s.getValue(r, c) != valueUndef {
@@ -159,9 +159,7 @@ func (s Sudoku) GetAllOptions() []Option {
 		}
 	}
 
-	sort.Slice(res, func(i, j int) bool {
-		return len(res[i].option) < len(res[j].option)
-	})
+	res.SortByLength()
 	return res
 }
 
@@ -175,49 +173,126 @@ func (s Sudoku) Completed() bool {
 	return true
 }
 
-func (s *Sudoku) Solve(depth int) bool {
+func (s *Sudoku) Solve(depth int) (int, bool) {
 	fmt.Printf(s.String())
+	mdepth := depth
+	var options Options
 	// loop on obvious solutions
-	options := s.GetAllOptions()
 	//fmt.Printf("(depth = %d) Found %d options\n", depth, len(options))
+
+	// get all available options
+	options = s.GetAllOptions()
 	for {
 		// if no options found, Sudoku is solved
 		if len(options) == 0 {
 			completed := s.Completed()
-			fmt.Printf("(depth = %d) No other options, sudoku completed=%v %s", depth, completed, s.String())
-			return completed
+			fmt.Printf("No other options, sudoku completed=%v\n%s", completed, s.String())
+			return depth, completed
+		}
+	DoObvious:
+		nbObvious, result := s.ResolveObviousOptions(options)
+		if nbObvious > 0 { // some obvious solution found, update options
+			fmt.Println(result)
+			options = s.GetAllOptions()
+			goto DoObvious
 		}
 
-		nbObvious := 0
-		for _, option := range options {
-			// set all obvious option (that is option with only 1 possible value)
-			if len(option.option) != 1 {
-				break
-			}
-			nbObvious++
-			//fmt.Printf("(depth = %d) Set obvious %s\n", depth, option.String())
-			s.SetValue(option.GetValues()[0], option.row, option.col)
+		nakedParis, result := s.ResolveNakedPairOptions(options)
+		if nakedParis > 0 {
+			fmt.Println(result)
+			continue
 		}
 		// no obvious solution found, exit current loop to switch to another strategy
 		if nbObvious == 0 {
 			break
-		} else {
-			options = s.GetAllOptions()
-			//fmt.Printf("(depth = %d) Found %d options\n", depth, len(options))
 		}
 	}
 
-	// try first non-trivial options with recursive strategy
+	// finally try remaining options with recursive strategy
 	option := options[0]
 	for _, value := range option.GetValues() {
-		fmt.Printf("(depth = %d) Set possible %d of %s\n", depth, value, option.String())
+		fmt.Printf("(depth = %d/%d) Set possible %d of %s\n", depth, mdepth, value, option.String())
 		s2 := s.Clone()
 		s2.SetValue(value, option.row, option.col)
-		if s2.Solve(depth + 1) {
+
+		ld, completed := s2.Solve(depth + 1)
+		if ld > mdepth {
+			mdepth = ld
+		}
+		if completed {
 			// this option/value was OK, accept result and exit successfully
 			s.values = s2.values
-			return true
+			return mdepth, true
 		}
 	}
-	return s.Completed()
+	return mdepth, s.Completed()
+}
+
+// ResolveObviousOptions sets all obvious option (that is option with only 1 possible value)
+func (s *Sudoku) ResolveObviousOptions(options Options) (int, string) {
+	obvOpts := Options{}
+	res := "Obvious Options:"
+	for _, option := range options {
+		if option.Length() != 1 {
+			continue
+		}
+		obvOpts = append(obvOpts, option)
+		s.SetValue(option.GetValues()[0], option.row, option.col)
+	}
+	nbObvious := len(obvOpts)
+	if nbObvious == 0 {
+		res += " None"
+	} else {
+		list := make([]string, nbObvious)
+		for i, opt := range obvOpts {
+			list[i] = fmt.Sprintf("%s", opt.String())
+		}
+		res += fmt.Sprintf(" %d (%s)", nbObvious, strings.Join(list, ", "))
+	}
+	return nbObvious, res
+}
+
+// ResolveNakedPairOptions based on https://sudoku.com/fr/regles-du-sudoku/paires-nues
+func (s Sudoku) ResolveNakedPairOptions(options Options) (int, string) {
+	// for each subscare
+	actions := []string{}
+	for c := 0; c < s.size; c += 3 {
+		for r := 0; r < s.size; r += 3 {
+			// get options for current subscare
+			subScareFilter := FilterSubScareFunc(r, c)
+			keep := func(opt Option) bool { return subScareFilter(opt) && opt.Length() >= 2 }
+			localOptions := options.Filter(keep)
+			if len(localOptions) < 4 { // not enough options for naked pair technic
+				continue
+			}
+
+			// first and second localOptions must be a pair, otherwise no solution => skip to next subscare
+			if localOptions[0].Length() != 2 || localOptions[1].Length() != 2 {
+				continue
+			}
+
+			// check if same pair, otherwise no solution => skip to next subscare
+			pair := localOptions[0].option
+			if !localOptions[1].option.Contains(pair) {
+				continue
+			}
+
+			// we found our two pairs, remove them from remaining options
+			for _, option := range localOptions[2:] {
+				if option.option.Contains(pair) {
+					actions = append(actions, fmt.Sprintf("%s from %s", pair.String(), option.String()))
+					option.option.RemoveSet(pair)
+				}
+			}
+		}
+	}
+	nbNakedPairs := len(actions)
+	res := "Naked Pairs: "
+	if nbNakedPairs == 0 {
+		res += "    None"
+	} else {
+		res += fmt.Sprintf("    %d (%s)", nbNakedPairs, strings.Join(actions, ","))
+	}
+
+	return nbNakedPairs, res
 }

@@ -11,10 +11,8 @@ type ValueSet map[int]struct{}
 
 func (pv ValueSet) String() string {
 	res := []string{}
-	for _, v := range []int{1, 2, 3, 4, 5, 6, 7, 8, 9} {
-		if _, found := pv[v]; found {
-			res = append(res, strconv.Itoa(v))
-		}
+	for v, _ := range pv {
+		res = append(res, strconv.Itoa(v))
 	}
 	sort.Strings(res)
 	return fmt.Sprintf("[%s]", strings.Join(res, ", "))
@@ -27,4 +25,24 @@ func (pv ValueSet) GetValues() []int {
 	}
 	sort.Ints(res)
 	return res
+}
+
+func (pv ValueSet) Contains(ovs ValueSet) bool {
+	for ov := range ovs {
+		if _, found := pv[ov]; !found {
+			return false
+		}
+	}
+	return true
+}
+
+// RemoveSet removes all elements of the given ValueSet `ovs` from the receiver ValueSet `pv`.
+func (pv ValueSet) RemoveSet(ovs ValueSet) {
+	for ov := range ovs {
+		delete(pv, ov)
+	}
+}
+
+func (pv ValueSet) RemoveValue(value int) {
+	delete(pv, value)
 }

@@ -182,30 +182,45 @@ func (s *Sudoku) Solve(depth int) (int, bool) {
 
 	// get all available options
 	options = s.GetAllOptions()
-	for {
-		// if no options found, Sudoku is solved
-		if len(options) == 0 {
-			completed := s.Completed()
-			fmt.Printf("No other options, sudoku completed=%v\n%s", completed, s.String())
-			return depth, completed
-		}
-	DoObvious:
+	for len(options) > 0 {
+
 		nbObvious, result := s.ResolveObviousOptions(options)
 		if nbObvious > 0 { // some obvious solution found, update options
 			fmt.Println(result)
 			options = s.GetAllOptions()
-			goto DoObvious
+			continue
 		}
 
-		nakedParis, result := s.ResolveNakedPairOptions(options)
-		if nakedParis > 0 {
+		nbHiddenSingletons, result := s.ResolveHiddenSingletonsOptions(options)
+		if nbHiddenSingletons > 0 {
+			fmt.Println(result)
+			options = s.GetAllOptions()
+			continue
+		}
+
+		nakedTriplets, result := s.ResolveNakedTripletOptions(options)
+		if nakedTriplets > 0 {
 			fmt.Println(result)
 			continue
 		}
+
+		nakedPairs, result := s.ResolveNakedPairOptions(options)
+		if nakedPairs > 0 {
+			fmt.Println(result)
+			continue
+		}
+
 		// no obvious solution found, exit current loop to switch to another strategy
 		if nbObvious == 0 {
 			break
 		}
+	}
+
+	// if no options found, Sudoku is solved
+	if len(options) == 0 {
+		completed := s.Completed()
+		fmt.Printf("No other options, sudoku completed=%v\n%s", completed, s.String())
+		return depth, completed
 	}
 
 	// finally try remaining options with recursive strategy
@@ -295,4 +310,130 @@ func (s Sudoku) ResolveNakedPairOptions(options Options) (int, string) {
 	}
 
 	return nbNakedPairs, res
+}
+
+// ResolveNakedTripletOptions based on https://sudoku.com/fr/regles-du-sudoku/triplets-nus
+func (s Sudoku) ResolveNakedTripletOptions(options Options) (int, string) {
+	// for each subscare
+	actions := []string{}
+
+	controlTriplets := func(localOpts Options) {
+		//fmt.Printf("DEBUG TRIPLET controlTriplets: %d options: %s\n", len(localOpts), localOpts.String())
+		if len(localOpts) < 4 { // not enough options for naked triplets technic
+			return
+		}
+
+		// localOptions are sorted by ascending length. Three first localOptions must be a pair, otherwise no solution => skip to next subscare
+		if localOpts[2].Length() != 2 {
+			return
+		}
+
+		// get possibles numbers given by three first localOptions
+		possibleNumbers := make(map[int]int)
+		for _, pair := range localOpts[:3] {
+			for _, v := range pair.GetValues() {
+				possibleNumbers[v]++
+			}
+		}
+		// check if there are 3 possibles numbers, each two times
+		if len(possibleNumbers) > 3 {
+			return
+		}
+		for _, nb := range possibleNumbers {
+			if nb != 2 {
+				return
+			}
+		}
+
+		// we found our three pairs, remove possibles numbers from remaining options
+		for _, option := range localOpts[3:] {
+			for _, pair := range localOpts[:3] {
+				if option.option.Contains(pair.option) {
+					actions = append(actions, fmt.Sprintf("%s from %s", pair.option.String(), option.String()))
+					option.option.RemoveSet(pair.option)
+				}
+			}
+		}
+	}
+
+	for c := 0; c < s.size; c += 3 {
+		for r := 0; r < s.size; r += 3 {
+			// get options for current subscare
+			subScareFilter := FilterSubScareFunc(r, c)
+			keep := func(opt Option) bool { return subScareFilter(opt) && opt.Length() >= 2 }
+			localOptions := options.Filter(keep)
+			controlTriplets(localOptions)
+		}
+	}
+
+	nbNakedTriplets := len(actions)
+	res := "Naked Triplets: "
+	if nbNakedTriplets == 0 {
+		res += "    None"
+	} else {
+		res += fmt.Sprintf(" %d (%s)", nbNakedTriplets, strings.Join(actions, ","))
+	}
+
+	return nbNakedTriplets, res
+}
+
+// ResolveHiddenSingletonsOptions based on https://sudoku.com/fr/regles-du-sudoku/singletons-caches
+func (s Sudoku) ResolveHiddenSingletonsOptions(options Options) (int, string) {
+	// for each subscare
+	actions := []string{}
+
+	controlHiddenSingleton := func(localOpts Options) {
+		//fmt.Printf("DEBUG HiddenSingleton control: %d options: %s\n", len(localOpts), localOpts.String())
+		if len(localOpts) < 1 { // not enough options for naked triplets technic
+			return
+		}
+
+		// get possibles numbers given by localOptions
+		possibleNumbers := make(map[int]int)
+		for _, pair := range localOpts {
+			for _, v := range pair.GetValues() {
+				possibleNumbers[v]++
+			}
+		}
+
+		// search and keep only singleton
+		for n, nb := range possibleNumbers {
+			if nb > 1 {
+				delete(possibleNumbers, n)
+			}
+		}
+
+		// process singleton
+		for _, option := range localOpts {
+			for n, _ := range possibleNumbers {
+				// if singleton is within this option, apply it
+				if _, found := option.option[n]; found {
+					option.option = ValueSet{n: struct{}{}}
+					actions = append(actions, fmt.Sprintf("%s", option.String()))
+					s.SetValue(n, option.row, option.col)
+					break
+				}
+			}
+		}
+	}
+
+	for c := 0; c < s.size; c += 3 {
+		for r := 0; r < s.size; r += 3 {
+			// get options for current subscare
+			subScareFilter := FilterSubScareFunc(r, c)
+			keep := func(opt Option) bool { return subScareFilter(opt) && opt.Length() >= 2 }
+			localOptions := options.Filter(keep)
+			controlHiddenSingleton(localOptions)
+		}
+	}
+
+	nbHiddenSingletons := len(actions)
+	res := "Hidden Singletons: "
+	if nbHiddenSingletons == 0 {
+		res += "    None"
+	} else {
+		res += fmt.Sprintf(" %d (%s)", nbHiddenSingletons, strings.Join(actions, ","))
+	}
+
+	return nbHiddenSingletons, res
 }

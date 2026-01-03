@@ -9,6 +9,14 @@ import (
 
 type ValueSet map[int]struct{}
 
+func NewValueSet(values ...int) ValueSet {
+	pv := make(ValueSet)
+	for _, v := range values {
+		pv[v] = struct{}{}
+	}
+	return pv
+}
+
 func (pv ValueSet) String() string {
 	res := []string{}
 	for v, _ := range pv {

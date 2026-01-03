@@ -33,6 +33,17 @@ func (o Option) posString() string {
 
 type Options []Option
 
+func (o Options) String() string {
+	res := ""
+	for i, option := range o {
+		if i > 0 {
+			res += fmt.Sprintf(", ")
+		}
+		res += option.String()
+	}
+	return res
+}
+
 func (o Options) SortByLength() {
 	sort.Slice(o, func(i, j int) bool {
 		return len(o[i].option) < len(o[j].option)

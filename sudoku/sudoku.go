@@ -204,6 +204,12 @@ func (s *Sudoku) Solve(depth int) (int, bool) {
 			continue
 		}
 
+		nbHiddenTriplets, result := s.ResolveHiddenTripletsOptions(options)
+		if nbHiddenTriplets > 0 {
+			fmt.Println(result)
+			continue
+		}
+
 		nakedTriplets, result := s.ResolveNakedTripletOptions(options)
 		if nakedTriplets > 0 {
 			fmt.Println(result)
@@ -451,7 +457,7 @@ func (s Sudoku) ResolveHiddenPairsOptions(options Options) (int, string) {
 
 	controlHiddenPairs := func(localOpts Options) {
 		//fmt.Printf("DEBUG HiddenPairs control: %d options: %s\n", len(localOpts), localOpts.String())
-		if len(localOpts) < 3 { // not enough options for hidden pairs technic
+		if len(localOpts) < 2 { // not enough options for hidden pairs technic
 			return
 		}
 
@@ -512,7 +518,7 @@ func (s Sudoku) ResolveHiddenPairsOptions(options Options) (int, string) {
 			option.option.RemoveButSet(pair)
 		}
 		if len(actualOptions) > 0 {
-			actions = append(actions, fmt.Sprintf("%s from %s", pair.String(), strings.Join(actualOptions, " and ")))
+			actions = append(actions, fmt.Sprintf("%s from %s", pair.String(), strings.Join(actualOptions, " / ")))
 		}
 	}
 
@@ -535,4 +541,102 @@ func (s Sudoku) ResolveHiddenPairsOptions(options Options) (int, string) {
 	}
 
 	return nbHiddenPairs, res
+}
+
+// ResolveHiddenTripletsOptions based on https://sudoku.com/fr/regles-du-sudoku/triplets-caches/
+func (s Sudoku) ResolveHiddenTripletsOptions(options Options) (int, string) {
+	// for each subsquare
+	actions := []string{}
+
+	controlHiddenTriplets := func(localOpts Options) {
+		//fmt.Printf("DEBUG HiddenTriplets control: %d options: %s\n", len(localOpts), localOpts.String())
+		if len(localOpts) < 3 { // not enough options for hidden triplet technic
+			return
+		}
+
+		// get possible numbers given by localOptions
+		possibleNumbers := make(map[int]int)
+		for _, option := range localOpts {
+			for _, v := range option.GetValues() {
+				possibleNumbers[v]++
+			}
+		}
+
+		// search and keep only numbers with 3 possibles
+		for n, nb := range possibleNumbers {
+			if nb != 3 {
+				delete(possibleNumbers, n)
+			}
+		}
+		//fmt.Printf("DEBUG HiddenTriplets control: possibles %v\n", possibleNumbers)
+		// check if there are at least 3 numbers with 3 possibles
+		if len(possibleNumbers) < 3 {
+			return
+		}
+
+		// search for available triplet of numbers
+		var targetOptions Options
+		var triplet ValueSet
+	Search:
+		for i, _ := range possibleNumbers {
+			for j, _ := range possibleNumbers {
+				if i == j {
+					continue
+				}
+				for k, _ := range possibleNumbers {
+					if i == k || j == k {
+						continue
+					}
+					triplet = ValueSet{i: struct{}{}, j: struct{}{}, k: struct{}{}}
+					// find options with this pair
+					targetOptions = Options{}
+					for _, option := range localOpts {
+						if option.option.Contains(triplet) {
+							targetOptions = append(targetOptions, option)
+						}
+					}
+					if len(targetOptions) == 3 {
+						break Search
+					}
+				}
+			}
+		}
+		if len(targetOptions) != 3 {
+			return
+		}
+		//fmt.Printf("DEBUG HiddenTriplets control: found triplet %s in %s\n", triplet.String(), targetOptions.String())
+
+		// remove all others possibles than triplet from target options
+		actualOptions := []string{}
+		for _, option := range targetOptions {
+			if option.Length() < 4 { // do not process options with less than 4 possibles
+				continue
+			}
+			actualOptions = append(actualOptions, option.String())
+			option.option.RemoveButSet(triplet)
+		}
+		if len(actualOptions) > 0 {
+			actions = append(actions, fmt.Sprintf("%s from %s", triplet.String(), strings.Join(actualOptions, " / ")))
+		}
+	}
+
+	for c := 0; c < s.size; c += 3 {
+		for r := 0; r < s.size; r += 3 {
+			// get options for current subsquare
+			subSquareFilter := FilterSubSquareFunc(r, c)
+			keep := func(opt Option) bool { return subSquareFilter(opt) && opt.Length() >= 2 }
+			localOptions := options.Filter(keep)
+			controlHiddenTriplets(localOptions)
+		}
+	}
+
+	nbHiddenTriplets := len(actions)
+	res := "Hidden Triplets: "
+	if nbHiddenTriplets == 0 {
+		res += "    None"
+	} else {
+		res += fmt.Sprintf(" x%d (%s)", nbHiddenTriplets, strings.Join(actions, ", "))
+	}
+
+	return nbHiddenTriplets, res
 }

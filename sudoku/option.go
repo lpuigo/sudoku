@@ -19,11 +19,7 @@ func (o Option) GetValues() []int {
 }
 
 func (o Option) String() string {
-	return fmt.Sprintf("%s_%s", o.option.String(), o.posString())
-}
-
-func (o Option) ValueString(value int) string {
-	return fmt.Sprintf("%d_%s", value, o.posString())
+	return fmt.Sprintf("%s%s", o.posString(), o.option.String())
 }
 
 func (o Option) posString() string {

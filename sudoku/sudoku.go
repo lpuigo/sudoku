@@ -198,6 +198,12 @@ func (s *Sudoku) Solve(depth int) (int, bool) {
 			continue
 		}
 
+		nbHiddenPairs, result := s.ResolveHiddenPairsOptions(options)
+		if nbHiddenPairs > 0 {
+			fmt.Println(result)
+			continue
+		}
+
 		nakedTriplets, result := s.ResolveNakedTripletOptions(options)
 		if nakedTriplets > 0 {
 			fmt.Println(result)
@@ -262,31 +268,31 @@ func (s *Sudoku) ResolveObviousOptions(options Options) (int, string) {
 		for i, opt := range obvOpts {
 			list[i] = fmt.Sprintf("%s", opt.String())
 		}
-		res += fmt.Sprintf(" %d (%s)", nbObvious, strings.Join(list, ", "))
+		res += fmt.Sprintf(" x%d (%s)", nbObvious, strings.Join(list, ", "))
 	}
 	return nbObvious, res
 }
 
 // ResolveNakedPairOptions based on https://sudoku.com/fr/regles-du-sudoku/paires-nues
 func (s Sudoku) ResolveNakedPairOptions(options Options) (int, string) {
-	// for each subscare
+	// for each subsquare
 	actions := []string{}
 	for c := 0; c < s.size; c += 3 {
 		for r := 0; r < s.size; r += 3 {
-			// get options for current subscare
-			subScareFilter := FilterSubScareFunc(r, c)
-			keep := func(opt Option) bool { return subScareFilter(opt) && opt.Length() >= 2 }
+			// get options for current subsquare
+			subSquareFilter := FilterSubSquareFunc(r, c)
+			keep := func(opt Option) bool { return subSquareFilter(opt) && opt.Length() >= 2 }
 			localOptions := options.Filter(keep)
 			if len(localOptions) < 4 { // not enough options for naked pair technic
 				continue
 			}
 
-			// first and second localOptions must be a pair, otherwise no solution => skip to next subscare
+			// first and second localOptions must be a pair, otherwise no solution => skip to next subsquare
 			if localOptions[0].Length() != 2 || localOptions[1].Length() != 2 {
 				continue
 			}
 
-			// check if same pair, otherwise no solution => skip to next subscare
+			// check if same pair, otherwise no solution => skip to next subsquare
 			pair := localOptions[0].option
 			if !localOptions[1].option.Contains(pair) {
 				continue
@@ -306,7 +312,7 @@ func (s Sudoku) ResolveNakedPairOptions(options Options) (int, string) {
 	if nbNakedPairs == 0 {
 		res += "    None"
 	} else {
-		res += fmt.Sprintf("    %d (%s)", nbNakedPairs, strings.Join(actions, ","))
+		res += fmt.Sprintf("   x%d (%s)", nbNakedPairs, strings.Join(actions, ", "))
 	}
 
 	return nbNakedPairs, res
@@ -314,7 +320,7 @@ func (s Sudoku) ResolveNakedPairOptions(options Options) (int, string) {
 
 // ResolveNakedTripletOptions based on https://sudoku.com/fr/regles-du-sudoku/triplets-nus
 func (s Sudoku) ResolveNakedTripletOptions(options Options) (int, string) {
-	// for each subscare
+	// for each subsquare
 	actions := []string{}
 
 	controlTriplets := func(localOpts Options) {
@@ -323,7 +329,7 @@ func (s Sudoku) ResolveNakedTripletOptions(options Options) (int, string) {
 			return
 		}
 
-		// localOptions are sorted by ascending length. Three first localOptions must be a pair, otherwise no solution => skip to next subscare
+		// localOptions are sorted by ascending length. Three first localOptions must be a pair, otherwise no solution => skip to next subsquare
 		if localOpts[2].Length() != 2 {
 			return
 		}
@@ -358,9 +364,9 @@ func (s Sudoku) ResolveNakedTripletOptions(options Options) (int, string) {
 
 	for c := 0; c < s.size; c += 3 {
 		for r := 0; r < s.size; r += 3 {
-			// get options for current subscare
-			subScareFilter := FilterSubScareFunc(r, c)
-			keep := func(opt Option) bool { return subScareFilter(opt) && opt.Length() >= 2 }
+			// get options for current subsquare
+			subSquareFilter := FilterSubSquareFunc(r, c)
+			keep := func(opt Option) bool { return subSquareFilter(opt) && opt.Length() >= 2 }
 			localOptions := options.Filter(keep)
 			controlTriplets(localOptions)
 		}
@@ -371,7 +377,7 @@ func (s Sudoku) ResolveNakedTripletOptions(options Options) (int, string) {
 	if nbNakedTriplets == 0 {
 		res += "    None"
 	} else {
-		res += fmt.Sprintf(" %d (%s)", nbNakedTriplets, strings.Join(actions, ","))
+		res += fmt.Sprintf(" x%d (%s)", nbNakedTriplets, strings.Join(actions, ", "))
 	}
 
 	return nbNakedTriplets, res
@@ -379,7 +385,7 @@ func (s Sudoku) ResolveNakedTripletOptions(options Options) (int, string) {
 
 // ResolveHiddenSingletonsOptions based on https://sudoku.com/fr/regles-du-sudoku/singletons-caches
 func (s Sudoku) ResolveHiddenSingletonsOptions(options Options) (int, string) {
-	// for each subscare
+	// for each subsquare
 	actions := []string{}
 
 	controlHiddenSingleton := func(localOpts Options) {
@@ -419,9 +425,9 @@ func (s Sudoku) ResolveHiddenSingletonsOptions(options Options) (int, string) {
 
 	for c := 0; c < s.size; c += 3 {
 		for r := 0; r < s.size; r += 3 {
-			// get options for current subscare
-			subScareFilter := FilterSubScareFunc(r, c)
-			keep := func(opt Option) bool { return subScareFilter(opt) && opt.Length() >= 2 }
+			// get options for current subsquare
+			subSquareFilter := FilterSubSquareFunc(r, c)
+			keep := func(opt Option) bool { return subSquareFilter(opt) && opt.Length() >= 2 }
 			localOptions := options.Filter(keep)
 			controlHiddenSingleton(localOptions)
 		}
@@ -432,8 +438,101 @@ func (s Sudoku) ResolveHiddenSingletonsOptions(options Options) (int, string) {
 	if nbHiddenSingletons == 0 {
 		res += "    None"
 	} else {
-		res += fmt.Sprintf(" %d (%s)", nbHiddenSingletons, strings.Join(actions, ","))
+		res += fmt.Sprintf(" x%d (%s)", nbHiddenSingletons, strings.Join(actions, ", "))
 	}
 
 	return nbHiddenSingletons, res
+}
+
+// ResolveHiddenPairsOptions based on https://sudoku.com/fr/regles-du-sudoku/paires-cachees/
+func (s Sudoku) ResolveHiddenPairsOptions(options Options) (int, string) {
+	// for each subsquare
+	actions := []string{}
+
+	controlHiddenPairs := func(localOpts Options) {
+		//fmt.Printf("DEBUG HiddenPairs control: %d options: %s\n", len(localOpts), localOpts.String())
+		if len(localOpts) < 3 { // not enough options for hidden pairs technic
+			return
+		}
+
+		// get possible numbers given by localOptions
+		possibleNumbers := make(map[int]int)
+		for _, option := range localOpts {
+			for _, v := range option.GetValues() {
+				possibleNumbers[v]++
+			}
+		}
+
+		// search and keep only numbers with 2 possibles
+		for n, nb := range possibleNumbers {
+			if nb != 2 {
+				delete(possibleNumbers, n)
+			}
+		}
+		//fmt.Printf("DEBUG HiddenPairs control: possibles %v\n", possibleNumbers)
+		// check if there are at least 2 numbers with 2 possibles
+		if len(possibleNumbers) < 2 {
+			return
+		}
+
+		// search for available pairs of numbers
+		var targetOptions Options
+		var pair ValueSet
+	Search:
+		for i, _ := range possibleNumbers {
+			for j, _ := range possibleNumbers {
+				if i == j {
+					continue
+				}
+				pair = ValueSet{i: struct{}{}, j: struct{}{}}
+				// find options with this pair
+				targetOptions = Options{}
+				for _, option := range localOpts {
+					if option.option.Contains(pair) {
+						targetOptions = append(targetOptions, option)
+					}
+				}
+				if len(targetOptions) == 2 {
+					break Search
+				}
+			}
+		}
+		if len(targetOptions) != 2 {
+			return
+		}
+		//fmt.Printf("DEBUG HiddenPairs control: found pair %s in %s\n", pair.String(), targetOptions.String())
+
+		// remove all others possibles than pair from target options
+		actualOptions := []string{}
+		for _, option := range targetOptions {
+			if option.Length() < 3 { // do not process options with less than 3 possibles
+				continue
+			}
+			actualOptions = append(actualOptions, option.String())
+			option.option.RemoveButSet(pair)
+		}
+		if len(actualOptions) > 0 {
+			actions = append(actions, fmt.Sprintf("%s from %s", pair.String(), strings.Join(actualOptions, " and ")))
+		}
+	}
+
+	for c := 0; c < s.size; c += 3 {
+		for r := 0; r < s.size; r += 3 {
+			// get options for current subsquare
+			subSquareFilter := FilterSubSquareFunc(r, c)
+			keep := func(opt Option) bool { return subSquareFilter(opt) && opt.Length() >= 2 }
+			localOptions := options.Filter(keep)
+			controlHiddenPairs(localOptions)
+		}
+	}
+
+	nbHiddenPairs := len(actions)
+	res := "Hidden Pairs: "
+	if nbHiddenPairs == 0 {
+		res += "    None"
+	} else {
+		res += fmt.Sprintf(" x%d (%s)", nbHiddenPairs, strings.Join(actions, ", "))
+	}
+
+	return nbHiddenPairs, res
 }

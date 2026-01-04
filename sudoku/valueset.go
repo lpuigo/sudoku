@@ -51,6 +51,15 @@ func (pv ValueSet) RemoveSet(ovs ValueSet) {
 	}
 }
 
+// RemoveButSet removes all elements not included in the given ValueSet `ovs` from the receiver ValueSet `pv`.
+func (pv ValueSet) RemoveButSet(ovs ValueSet) {
+	for v, _ := range pv {
+		if _, found := ovs[v]; !found {
+			delete(pv, v)
+		}
+	}
+}
+
 func (pv ValueSet) RemoveValue(value int) {
 	delete(pv, value)
 }

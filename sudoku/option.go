@@ -69,7 +69,7 @@ func FilterColFunc(col int) func(opt Option) bool {
 	return func(opt Option) bool { return opt.col == col }
 }
 
-func FilterSubScareFunc(row, col int) func(opt Option) bool {
+func FilterSubSquareFunc(row, col int) func(opt Option) bool {
 	rMin := row / 3 * 3
 	rMax := rMin + 2
 	cMin := col / 3 * 3
@@ -86,5 +86,5 @@ func (o Options) GetColumnOptions(col int) Options {
 }
 
 func (o Options) GetSubScareOptions(row, col int) Options {
-	return o.Filter(FilterSubScareFunc(row, col))
+	return o.Filter(FilterSubSquareFunc(row, col))
 }
